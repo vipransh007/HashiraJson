@@ -1,83 +1,57 @@
 import com.google.gson.Gson;
+import com.google.gson.reflect.TypeToken;
+
 import java.io.InputStream;
 import java.io.InputStreamReader;
 import java.io.Reader;
-import java.util.List;
+import java.lang.reflect.Type;
+import java.math.BigInteger;
+import java.util.Map;
+import java.util.TreeMap;
 
 public class Main {
-
-    // These will hold our problem's data once loaded
-    private static List<Double> coefficients;
-    private static double constant; // The 'c' we need to find
-
-    /**
-     * This is our f(x) function. It calculates the value of the polynomial for a given x.
-     * It assumes 'coefficients' and 'constant' have already been set.
-     */
-    public static double f(double x) {
-        double result = 0.0;
-        int degree = coefficients.size();
-
-        // Calculate the value for terms with coefficients (e.g., a*x^2, b*x)
-        for (int i = 0; i < degree; i++) {
-            // The power is degree - i. E.g., for [2, -3], the first power is 2, then 1.
-            double power = degree - i;
-            result += coefficients.get(i) * Math.pow(x, power);
-        }
-
-        // Add the constant term 'c'
-        result += constant;
-        return result;
-    }
-
     public static void main(String[] args) {
         // 1. READ AND PARSE THE JSON FILE
         Gson gson = new Gson();
-        ProblemData problemData = null;
 
-        try (InputStream is = Main.class.getClassLoader().getResourceAsStream("polynomial_problem.json");
+        try (InputStream is = Main.class.getClassLoader().getResourceAsStream("problem.json");
              Reader reader = new InputStreamReader(is)) {
-            problemData = gson.fromJson(reader, ProblemData.class);
+
+            // Define the type for our complex JSON structure: a map of strings to objects
+            Type type = new TypeToken<Map<String, Object>>(){}.getType();
+            Map<String, Object> data = gson.fromJson(reader, type);
+
+            // Use a TreeMap to process the test cases in numerical order ("1", "2", "3", ...)
+            Map<String, TestCase> testCases = new TreeMap<>();
+
+            // 2. EXTRACT THE TEST CASES FROM THE PARSED DATA
+            for (Map.Entry<String, Object> entry : data.entrySet()) {
+                // We only care about the numbered keys ("1", "2", etc.)
+                if (entry.getKey().matches("\\d+")) { // Check if the key is a number
+                    // Gson parses nested objects into a generic map, so we convert it back to a TestCase object
+                    TestCase tc = gson.fromJson(gson.toJson(entry.getValue()), TestCase.class);
+                    testCases.put(entry.getKey(), tc);
+                }
+            }
+
+            // 3. PROCESS EACH TEST CASE AND PRINT THE RESULT
+            System.out.println("--- Base Conversion Results ---");
+            for (Map.Entry<String, TestCase> entry : testCases.entrySet()) {
+                String caseNumber = entry.getKey();
+                TestCase tc = entry.getValue();
+
+                int base = Integer.parseInt(tc.base);
+                String valueStr = tc.value;
+
+                // Use BigInteger to convert the value from the given base to decimal (base 10)
+                // This is necessary because the numbers are too large for standard 'long'
+                BigInteger decimalValue = new BigInteger(valueStr, base);
+
+                System.out.println("Case #" + caseNumber + ": " + decimalValue);
+            }
+
         } catch (Exception e) {
             e.printStackTrace();
-            return; // Exit if file can't be read
-        }
-
-        coefficients = problemData.coefficients;
-        List<TestCase> testCases = problemData.test_cases;
-
-        if (testCases == null || testCases.isEmpty()) {
-            System.out.println("No test cases found in JSON file.");
-            return;
-        }
-
-        // 2. FIND THE CONSTANT ('c') USING THE FIRST TEST CASE
-        TestCase firstCase = testCases.get(0);
-        double x0 = firstCase.x;
-        double y0 = firstCase.y;
-
-        // Calculate f(x0) *without* the constant
-        double valueWithoutConstant = 0.0;
-        int degree = coefficients.size();
-        for (int i = 0; i < degree; i++) {
-            double power = degree - i;
-            valueWithoutConstant += coefficients.get(i) * Math.pow(x0, power);
-        }
-
-        // The equation is: y0 = valueWithoutConstant + constant
-        // So, constant = y0 - valueWithoutConstant
-        constant = y0 - valueWithoutConstant;
-
-        System.out.println("Using test case (x=" + x0 + ", y=" + y0 + "), the calculated constant is: " + constant);
-        System.out.println("----------------------------------------------------");
-        System.out.println("The full polynomial function is f(x) = 2x^2 - 3x + " + constant);
-        System.out.println("----------------------------------------------------");
-
-        // 3. CONFIGURE f(x) AND PROCESS ALL TEST CASES
-        System.out.println("Processing all test cases with the configured f(x):");
-        for (TestCase tc : testCases) {
-            double calculatedY = f(tc.x);
-            System.out.printf("For test case x = %.1f, f(x) = %.4f (Expected y = %.1f)\n", tc.x, calculatedY, tc.y);
         }
     }
 }
